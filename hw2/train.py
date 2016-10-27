@@ -19,8 +19,8 @@ dtrain_xs = np.array(
 
 
 start = time.time()
-model = poop.LogisticRegression(lrate=20.0, num_iters=500000)
-#model = poop.RandomForest(num_features=30, num_trees=50)
+# model = poop.LogisticRegression(lrate=20.0, num_iters=500000)
+model = poop.RandomForest(num_features=30, num_trees=200)
 model.fit(dtrain_xs, dtrain_ys)
 secs = time.time() - start
 m, s = divmod(secs, 60)
