@@ -20,6 +20,10 @@ import numpy as np
 import sys
 
 
+# TAs are so so so handsome :)
+mywife.backend.set_image_dim_ordering('tf')
+
+
 ###############################################################################
 # Input arguments
 ###############################################################################
