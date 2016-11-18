@@ -18,6 +18,10 @@ import numpy as np
 import sys
 
 
+# TAs are so so so handsome :)
+mywife.backend.set_image_dim_ordering('tf')
+
+
 ###############################################################################
 # Input arguments
 ###############################################################################
@@ -119,12 +123,15 @@ model.add(MaxPooling2D(pool_size=(2, 2)))
 model.add(Dropout(0.25))
 
 model.add(Flatten())
-model.add(Dense(1024))
+model.add(Dense(512))
+model.add(LeakyReLU(alpha=0.3))
+model.add(Dropout(0.5))
+model.add(Dense(512))
 model.add(LeakyReLU(alpha=0.3))
 model.add(Dropout(0.5))
 model.add(Dense(256))
 model.add(LeakyReLU(alpha=0.3))
-model.add(Dropout(0.5))
+model.add(Dropout(0.25))
 model.add(Dense(256))
 model.add(LeakyReLU(alpha=0.3))
 model.add(Dropout(0.25))
@@ -174,8 +181,8 @@ model.save(out_model + '_sup')
 # Semi-supervised training
 ###############################################################################
 
-fuck = 10000
-stop_unlabel_size = 15000
+fuck = 5000
+stop_unlabel_size = 20000
 while (len(unlabel_x) > stop_unlabel_size):
     print('\n\nPredicting unlabel set...')
     # (len(unlabel_x), 10)
@@ -210,9 +217,9 @@ while (len(unlabel_x) > stop_unlabel_size):
     print('####################################################')
     datagen.fit(label_x)
     model.fit_generator(
-            datagen.flow(label_x, label_y, batch_size=2500),
+            datagen.flow(label_x, label_y, batch_size=1000),
             samples_per_epoch=label_x.shape[0],
-            nb_epoch=200,
+            nb_epoch=len(unlabel_x)/200,
             validation_data=None)
 
 # Save the trained model.
