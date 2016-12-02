@@ -15,6 +15,7 @@ import collections
 import itertools
 import numpy as np
 import pandas as pd
+import random
 import re
 import sys
 import word2vec
@@ -24,8 +25,9 @@ import word2vec
 input_dir = sys.argv[1]
 out_csv = sys.argv[2]
 
+
 #############################################################################
-# Stopword removal
+# 1. Stopword removal
 #############################################################################
 
 def rm_stopword(in_file_path, out_file_path):
@@ -48,12 +50,12 @@ def rm_stopword(in_file_path, out_file_path):
 sys.stdout.write('[Step 1/6] Removing stop words...')
 sys.stdout.flush()
 rm_stopword(input_dir + '/title_StackOverflow.txt', 'title2.txt')
-rm_stopword('docs.txt', 'docs2.txt')
+rm_stopword(input_dir + '/docs.txt', 'docs2.txt')
 sys.stdout.write('\r[Step 1/6] Removing stop words... Done :)\n')
 
 
 #############################################################################
-# Word to phrase
+# 2. Word to phrase
 #############################################################################
 
 sys.stdout.write('[Step 2/6] Word to phrase...')
@@ -76,89 +78,75 @@ sys.stdout.write('\r[Step 2/6] Word to phrase... Done :)\n')
 
 
 #############################################################################
-# Word vectors and similarities
+# 3. BoW
 #############################################################################
 
-class MySentences(object):
+sys.stdout.write('[Step 3/6] BoW...')
+sys.stdout.flush()
 
-    def __init__(self, filename):
-        self.files = filename
+lines = []
+for idx, line in enumerate(open('title2.txt')):
+    lines.append(unicode(line, errors='ignore'))
+lines = np.array(lines)
 
-    def __iter__(self):
-        for f in self.files:
-            for idx, line in enumerate(open(f)):
-                yield line.split()
+vectorizer = CountVectorizer(max_features=500)
+feat = vectorizer.fit_transform(lines)
+feature = feat.toarray()
 
-sentences = MySentences(['title3.txt', 'docs3.txt'])
+sys.stdout.write('\r[Step 3/6] BoW... Done :)\n')
 
-model = Word2Vec(alpha=0.025, min_alpha=0.025, workers=8, size=300,
-        min_count=2, window=20, sample=0)
-model.build_vocab(sentences)
-for i in range(10):
+
+#############################################################################
+# 4. K-means
+#############################################################################
+
+clusterers = []
+nb_kmeans = 15
+for fuck in xrange(nb_kmeans):
     sys.stdout.write(
-            '\r[Step 3/6] Training word vectors... (%2d/10)' % (i + 1))
+            '\r[Step 4/6] Training K-means... (%2d/%2d)' % \
+                    (fuck + 1, nb_kmeans))
     sys.stdout.flush()
-    model.train(sentences)
-    model.alpha -= 0.002
-    model.min_alpha = model.alpha / 100
+
+    tmp = [random.randint(0, 19999)]
+    for c in xrange(19):
+        while (True):
+            i = random.randint(0, 19999)
+            if np.linalg.norm(feature[i]) == 0.0:
+                continue
+            is_ortho = True
+            for j in tmp:
+                ker = abs(np.dot(feature[i], feature[j]))
+                if ker != 0.0:
+                    is_ortho = False
+                    break
+            if is_ortho:
+                tmp.append(i)
+                break
+    # print '20 ortho-centers: %s' % (str(tmp))
+
+    init_centers = [feature[i] for i in tmp]
+    init_centers.append(np.zeros(feature.shape[1]))
+    init_centers = np.array(init_centers)
+
+    # print 'K-means started, this could take minutes Q_Q'
+    cluster = KMeans(init=init_centers, n_clusters=21, n_init=1, verbose=0)
+    cluster.fit(feat)
+    clusterers.append(cluster)
 sys.stdout.write('\n')
 
 
 #############################################################################
-# Similar words augmentation
-#############################################################################
-
-tmp = open('title4.txt', 'w')
-hist = {}
-for idx, line in enumerate(open('title3.txt')):
-    sys.stdout.write('\r[Step 4/6] Query expansion... (%5d/20000)' % (idx + 1))
-    sys.stdout.flush()
-
-    words_to_rm = []
-    while len(line.split()) >= 5:
-        try:
-            unmatch = model.doesnt_match(line.split())
-            line = line.replace(unmatch, '', 1)
-        except ValueError:
-            break
-    words = []
-    for w in line.split():
-        if not model.vocab.has_key(w):
-            continue
-
-        c = model.vocab[w].count
-        if c > 100:
-            words.append(w)
-
-            sim_w = None
-            if hist.has_key(w):
-                sim_w = hist[w]
-            else:
-                sim_w = model.most_similar(w)
-                hist.update({w: sim_w})
-            for i in xrange(6):
-                if sim_w[i][1] > 0.4:
-                    words.append(sim_w[i][0])
-
-    tmp.write(' '.join(words) + '\n')
-sys.stdout.write('\n')
-tmp.close()
-
-
-#############################################################################
-# Prediction
+# 5. Prediction
 #############################################################################
 
 # (5000000, 3)
 chk_idx_csv = pd.read_csv(input_dir + '/check_index.csv').values
 
-# 
-lines_of_words = []
-for idx, line in enumerate(open('title4.txt')):
-    lines_of_words.append(line.split())
-lines_of_words = np.array(lines_of_words)
+# (20000,)
+labels = [c.labels_ for c in clusterers]
 
-
+# (5000000,)
 result = []
 idx = 0
 for r in chk_idx_csv:
@@ -168,10 +156,18 @@ for r in chk_idx_csv:
         sys.stdout.flush()
     idx += 1
 
-    words_1 = set(lines_of_words[r[1]])
-    words_2 = set(lines_of_words[r[2]])
-
-    if len(words_1.intersection(words_2)) >= 7:
+    cnt_0 = 0
+    cnt_1 = 0
+    for l in labels:
+        l_1 = l[r[1]]
+        l_2 = l[r[2]]
+        if l_1 == 20 or l_2 == 20:
+            cnt_0 += 1
+        elif l_1 == l_2:
+            cnt_1 += 1
+        else:
+            cnt_0 += 1
+    if cnt_1 > cnt_0:
         result.append(1)
     else:
         result.append(0)
